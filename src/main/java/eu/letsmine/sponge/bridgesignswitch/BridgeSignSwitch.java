@@ -1,5 +1,8 @@
 package eu.letsmine.sponge.bridgesignswitch;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -10,9 +13,13 @@ import org.spongepowered.api.block.BlockSnapshot;
 import org.spongepowered.api.block.BlockType;
 import org.spongepowered.api.block.BlockTypes;
 import org.spongepowered.api.block.tileentity.TileEntity;
+import org.spongepowered.api.config.ConfigDir;
+import org.spongepowered.api.config.DefaultConfig;
+import org.spongepowered.api.data.DataContainer;
 import org.spongepowered.api.data.DataTransactionResult;
 import org.spongepowered.api.data.manipulator.mutable.block.DirectionalData;
 import org.spongepowered.api.data.manipulator.mutable.tileentity.SignData;
+import org.spongepowered.api.data.persistence.DataTranslators;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.block.InteractBlockEvent;
@@ -21,6 +28,7 @@ import org.spongepowered.api.event.cause.Cause;
 import org.spongepowered.api.event.filter.cause.First;
 import org.spongepowered.api.event.game.state.GamePreInitializationEvent;
 import org.spongepowered.api.event.game.state.GameStartedServerEvent;
+import org.spongepowered.api.event.game.state.GameStoppingServerEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.text.Text;
@@ -33,6 +41,13 @@ import org.spongepowered.api.world.schematic.Schematic;
 
 import com.flowpowered.math.vector.Vector3i;
 import com.google.inject.Inject;
+
+import ninja.leaping.configurate.ConfigurationNode;
+import ninja.leaping.configurate.ConfigurationOptions;
+import ninja.leaping.configurate.commented.CommentedConfigurationNode;
+import ninja.leaping.configurate.hocon.HoconConfigurationLoader;
+import ninja.leaping.configurate.loader.ConfigurationLoader;
+import ninja.leaping.configurate.objectmapping.ObjectMappingException;
 
 @Plugin(id = BridgeSignSwitch.ID, name = BridgeSignSwitch.NAME, version = BridgeSignSwitch.VERSION)
 public class BridgeSignSwitch {
@@ -50,6 +65,19 @@ public class BridgeSignSwitch {
 	
 	@Inject
 	private Logger logger;
+	
+	@Inject
+	@DefaultConfig(sharedRoot = true)
+	private Path defaultConfig;
+
+	@Inject
+	@DefaultConfig(sharedRoot = true)
+	private ConfigurationLoader<CommentedConfigurationNode> configManager;
+
+	@Inject
+	@ConfigDir(sharedRoot = false)
+	private Path privateConfigDir;
+	private Path bridgeDir;
 
 	private Text bridgeSignTemplate;
 	private Text bridgeEndSignTemplate;
@@ -61,8 +89,58 @@ public class BridgeSignSwitch {
 	
 	@Listener
 	public void onServerStart(GameStartedServerEvent event) {
+		bridgeDir = privateConfigDir.resolve("bridges");
+		File bridgeFile = bridgeDir.toFile();
+		if (!bridgeFile.exists()) {
+			logger.info("Creating: " + bridgeFile.toString());
+			bridgeFile.mkdirs();
+		} else {
+			logger.info("Exist: " + bridgeFile.toString());
+		}
+		File[] files = bridgeFile.listFiles();
+		if (files.length > 0) {
+			logger.info("Loading " + files.length + " Bridges");
+			for (File file : files) {
+				try {
+					Path bridgeConfig = file.toPath();
+					logger.info("Load: " + bridgeConfig.toString());
+					ConfigurationLoader<CommentedConfigurationNode> loader = HoconConfigurationLoader.builder().setPath(bridgeConfig).build();
+					ConfigurationNode bridgeRootNote = loader.load();
+					Vector3i v = bridgeRootNote.getNode("vector").getValue(DataTranslators.VECTOR_3_I.getToken());
+					Schematic s = bridgeRootNote.getNode("schematic").getValue(DataTranslators.LEGACY_SCHEMATIC.getToken());
+					
+					BRIDGES.put(v, s);
+				} catch (Exception e) {
+					logger.error(e.getMessage(), e);
+				}
+			}
+		} else {
+			logger.info("No Bridges found.");
+		}
+		
 		bridgeSignTemplate = Text.builder("[Bridge]").build();
 		bridgeEndSignTemplate = Text.builder("[Bridge End]").build();
+	}
+	
+	@Listener
+	public void onServerStop(GameStoppingServerEvent event) {
+		BRIDGES.forEach((v, s) -> {
+			try {
+				Path bridgeConfig = bridgeDir.resolve("" + v.hashCode());
+				ConfigurationLoader<CommentedConfigurationNode> loader = HoconConfigurationLoader.builder().setPath(bridgeConfig).build();
+				ConfigurationNode rootNode = loader.createEmptyNode(ConfigurationOptions.defaults());
+				ConfigurationNode vectorNode = rootNode.getNode("vector");
+				vectorNode.setValue(DataTranslators.VECTOR_3_I.getToken(), v);
+				ConfigurationNode schematicNode = rootNode.getNode("schematic");
+				schematicNode.setValue(DataTranslators.LEGACY_SCHEMATIC.getToken(), s);
+			
+				loader.save(rootNode);
+			} catch (Exception e) {
+				logger.error(e.getMessage(), e);
+			}
+			
+		});
+		BRIDGES.clear();
 	}
 	
 	@Listener
@@ -294,11 +372,8 @@ public class BridgeSignSwitch {
 				Vector3i minVector = new Vector3i(xmin, y, zmin);
 				Vector3i maxVector = new Vector3i(xmax, y, zmax);
 				
-				Schematic newBridge = BRIDGES.remove(p0Vector);
-				
-				//Aktuellen zwischenraum speichern, anschliessend die newBridge Schematic einfügen.
-				World world = location.getExtent();
-				//Create a Copy
+				//Aktuellen zwischenraum speichern
+				World world = primaryLocation.getExtent();
 				ArchetypeVolume archetypeVolume = world.createArchetypeVolume(minVector, maxVector, p0Vector);
 				if (archetypeVolume == null) {
 					logger.info("Debug: ArchetypeVolume can not create");
@@ -308,13 +383,17 @@ public class BridgeSignSwitch {
 					.metaValue(Schematic.METADATA_AUTHOR, BridgeSignSwitch.NAME)
 					.metaValue(Schematic.METADATA_NAME, p0Vector.hashCode()).build();
 				
+				//Aktuellen Zwischenraum laden
+				Schematic newBridge = BRIDGES.remove(p0Vector);
 				if (newBridge == null) {
+					//Zwischenraum löschen
 					for (int xc = xmin; xc <= xmax; xc++) {
 						for (int zc = zmin; zc <= zmax; zc++) {
 							world.setBlock(xc, y, zc, BlockTypes.AIR.getDefaultState(), BlockChangeFlag.ALL, Cause.source(pluginContainer).build());
 						}
 					}
 				} else {
+					//Zwischenraum einfügen wenn vorhanden
 					newBridge.apply(primaryLocation, BlockChangeFlag.ALL, Cause.source(pluginContainer).owner(player).build());
 				}
 				
