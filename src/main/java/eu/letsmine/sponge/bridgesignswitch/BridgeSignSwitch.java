@@ -90,7 +90,8 @@ public class BridgeSignSwitch {
 		      .dataClass(BridgeData.class)
 		      .immutableClass(BridgeData.Immutable.class)
 		      .builder(new BridgeData.Builder())
-		      .manipulatorId("BridgeData")
+		      .manipulatorId("bridge-sign-switch")
+		      .dataName("bridge")
 		      .buildAndRegister(pluginContainer);
 	}
 	
