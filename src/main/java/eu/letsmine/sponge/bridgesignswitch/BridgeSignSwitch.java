@@ -84,7 +84,12 @@ public class BridgeSignSwitch {
 	
 	@Listener
 	public void onPreInit(GamePreInitializationEvent event) {
-		game.getDataManager().register(BridgeData.class, BridgeData.Immutable.class, new BridgeData.Builder());
+		DataRegistration.<BridgeData, BridgeData.Immutable>builder()
+		      .setDataClass(BridgeData.class)
+		      .setImmutableDataClass(BridgeData.Immutable.class)
+		      .setBuilder(new BridgeData.Builder())
+		      .setManipulatorId("BridgeData")
+		      .buildAndRegister(this);
 	}
 	
 	@Listener
