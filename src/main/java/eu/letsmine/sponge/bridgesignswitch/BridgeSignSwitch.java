@@ -87,11 +87,11 @@ public class BridgeSignSwitch {
 	@Listener
 	public void onPreInit(GamePreInitializationEvent event) {
 		DataRegistration.<BridgeData, BridgeData.Immutable>builder()
-		      .setDataClass(BridgeData.class)
-		      .setImmutableDataClass(BridgeData.Immutable.class)
-		      .setBuilder(new BridgeData.Builder())
-		      .setManipulatorId("BridgeData")
-		      .buildAndRegister(this);
+		      .dataClass(BridgeData.class)
+		      .immutableClass(BridgeData.Immutable.class)
+		      .builder(new BridgeData.Builder())
+		      .manipulatorId("BridgeData")
+		      .buildAndRegister(pluginContainer);
 	}
 	
 	@Listener
