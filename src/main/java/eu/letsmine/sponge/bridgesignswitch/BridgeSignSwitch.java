@@ -117,7 +117,9 @@ public class BridgeSignSwitch {
 					ConfigurationLoader<CommentedConfigurationNode> loader = HoconConfigurationLoader.builder().setPath(bridgeConfig).build();
 					ConfigurationNode bridgeRootNote = loader.load();
 					Vector3i v = bridgeRootNote.getNode("vector").getValue(DataTranslators.VECTOR_3_I.getToken());
-					Schematic s = bridgeRootNote.getNode("schematic").getValue(DataTranslators.LEGACY_SCHEMATIC.getToken());
+					String schematicString = bridgeRootNote.getNode("schematic").getString();
+					DataView data = DataFormats.JSON.read(schematicString);
+					Schematic s = DataTranslators.SCHEMATIC.translate(data);
 					
 					BRIDGES.put(v, s);
 				} catch (Exception e) {
