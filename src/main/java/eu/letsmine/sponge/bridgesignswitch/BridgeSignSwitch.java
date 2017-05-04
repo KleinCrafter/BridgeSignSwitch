@@ -19,8 +19,10 @@ import org.spongepowered.api.data.DataRegistration;
 import org.spongepowered.api.data.DataRegistration.Builder;
 import org.spongepowered.api.data.DataContainer;
 import org.spongepowered.api.data.DataTransactionResult;
+import org.spongepowered.api.data.DataView;
 import org.spongepowered.api.data.manipulator.mutable.block.DirectionalData;
 import org.spongepowered.api.data.manipulator.mutable.tileentity.SignData;
+import org.spongepowered.api.data.persistence.DataFormats;
 import org.spongepowered.api.data.persistence.DataTranslators;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
@@ -87,11 +89,12 @@ public class BridgeSignSwitch {
 	@Listener
 	public void onPreInit(GamePreInitializationEvent event) {
 		DataRegistration.<BridgeData, BridgeData.Immutable>builder()
-		      .setDataClass(BridgeData.class)
-		      .setImmutableDataClass(BridgeData.Immutable.class)
-		      .setBuilder(new BridgeData.Builder())
-		      .setManipulatorId("BridgeData")
-		      .buildAndRegister(this);
+		      .dataClass(BridgeData.class)
+		      .immutableClass(BridgeData.Immutable.class)
+		      .builder(new BridgeData.Builder())
+		      .manipulatorId("bridge-sign-switch")
+		      .dataName("bridge")
+		      .buildAndRegister(pluginContainer);
 	}
 	
 	@Listener
@@ -139,7 +142,10 @@ public class BridgeSignSwitch {
 				ConfigurationNode vectorNode = rootNode.getNode("vector");
 				vectorNode.setValue(DataTranslators.VECTOR_3_I.getToken(), v);
 				ConfigurationNode schematicNode = rootNode.getNode("schematic");
-				schematicNode.setValue(DataTranslators.LEGACY_SCHEMATIC.getToken(), s);
+				DataView data = DataTranslators.SCHEMATIC.translate(s);
+				String schematicString = DataFormats.JSON.write(data);
+				
+				schematicNode.setValue(schematicString);
 			
 				loader.save(rootNode);
 			} catch (Exception e) {
