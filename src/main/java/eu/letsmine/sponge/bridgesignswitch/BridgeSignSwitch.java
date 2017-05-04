@@ -1,8 +1,12 @@
 package eu.letsmine.sponge.bridgesignswitch;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -117,11 +121,12 @@ public class BridgeSignSwitch {
 					ConfigurationLoader<CommentedConfigurationNode> loader = HoconConfigurationLoader.builder().setPath(bridgeConfig).build();
 					ConfigurationNode bridgeRootNote = loader.load();
 					Vector3i v = bridgeRootNote.getNode("vector").getValue(DataTranslators.VECTOR_3_I.getToken());
-					String schematicString = bridgeRootNote.getNode("schematic").getString();
-					DataView data = DataFormats.JSON.read(schematicString);
-					Schematic s = DataTranslators.SCHEMATIC.translate(data);
-					
-					BRIDGES.put(v, s);
+					byte[] nbt = Base64.getDecoder().decode(bridgeRootNote.getNode("schematic").getString());
+					try (ByteArrayInputStream in = new ByteArrayInputStream(nbt)) {
+						DataView data = DataFormats.NBT.readFrom(in);
+						Schematic s = DataTranslators.SCHEMATIC.translate(data);
+						BRIDGES.put(v, s);
+					}
 				} catch (Exception e) {
 					logger.error(e.getMessage(), e);
 				}
@@ -145,9 +150,11 @@ public class BridgeSignSwitch {
 				vectorNode.setValue(DataTranslators.VECTOR_3_I.getToken(), v);
 				ConfigurationNode schematicNode = rootNode.getNode("schematic");
 				DataView data = DataTranslators.SCHEMATIC.translate(s);
-				String schematicString = DataFormats.JSON.write(data);
-				
-				schematicNode.setValue(schematicString);
+				try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+					DataFormats.NBT.writeTo(out, data);
+					String schematicString = Base64.getEncoder().encodeToString(out.toByteArray());
+					schematicNode.setValue(schematicString);
+				}
 			
 				loader.save(rootNode);
 			} catch (Exception e) {
